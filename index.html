@@ -4,12 +4,128 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Singapore Climate Dashboards</title>
+  <meta name="description" content="Free browser-based dashboards and calculators using public Singapore climate and energy data.">
+  <style>
+    :root {
+      --bg: #f6f8f6;
+      --card: #ffffff;
+      --text: #1d2a24;
+      --muted: #5f6f67;
+      --accent: #1f7a4d;
+      --accent-soft: #e3f1e9;
+      --border: #dde5e0;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121815;
+        --card: #1b2420;
+        --text: #e6eee9;
+        --muted: #9db0a6;
+        --accent: #5cc48e;
+        --accent-soft: #1f3529;
+        --border: #2a3630;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+    header { padding: 56px 0 32px; }
+    .tag {
+      display: inline-block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+    }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1.2; margin: 0 0 12px; }
+    .lead { font-size: 1.1rem; color: var(--muted); max-width: 640px; margin: 0; }
+
+    h2 { font-size: 1.1rem; margin: 32px 0 16px; color: var(--muted); font-weight: 600; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    a.card:hover, a.card:focus-visible { transform: translateY(-3px); border-color: var(--accent); }
+    .icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .card h3 { margin: 0 0 6px; font-size: 1.1rem; }
+    .card p { margin: 0 0 16px; color: var(--muted); font-size: 0.95rem; flex-grow: 1; }
+    .cta { font-weight: 600; color: var(--accent); font-size: 0.95rem; }
+    .card.soon { opacity: 0.6; }
+    .card.soon .cta { color: var(--muted); }
+
+    footer {
+      margin-top: 56px;
+      padding: 24px 0 40px;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    footer a { color: var(--accent); }
+  </style>
 </head>
-<body style="font-family:sans-serif;max-width:700px;margin:40px auto;padding:0 16px;">
-  <h1>Singapore Climate Dashboards</h1>
-  <ul>
-    <li><a href="nea-temperature-dashboard.html">NEA Temperature Dashboard</a></li>
-  </ul>
-  <p style="font-size:0.85em;color:#666;">Data: NEA via data.gov.sg. Personal project, not official guidance.</p>
+<body>
+  <div class="wrap">
+    <header>
+      <span class="tag">Singapore · Open data</span>
+      <h1>Singapore Climate Dashboards</h1>
+      <p class="lead">Free browser-based tools that turn public Singapore weather and energy data into something you can use. No sign-up, nothing to install.</p>
+    </header>
+
+    <main>
+      <h2>Dashboards</h2>
+      <div class="grid">
+
+        <a class="card" href="nea-temperature-dashboard.html">
+          <div class="icon">🌡️</div>
+          <h3>Air Temperature Dashboard</h3>
+          <p>Live and historical air temperature from NEA weather stations. Trend and daily range charts, with CSV export.</p>
+          <span class="cta">Open dashboard →</span>
+        </a>
+
+        <!-- TO ADD A NEW TOOL: copy the block below, remove class "soon",
+             change the <div> to <a ... href="your-file.html">, and edit the text.
+        <div class="card soon">
+          <div class="icon">⚡</div>
+          <h3>Tool name</h3>
+          <p>One-line description of what it does.</p>
+          <span class="cta">Coming soon</span>
+        </div>
+        -->
+
+      </div>
+    </main>
+
+    <footer>
+      Data: National Environment Agency (NEA) via data.gov.sg, under the Singapore Open Data Licence.<br>
+      Personal project. Not official guidance from any organisation. Check results before relying on them.
+    </footer>
+  </div>
 </body>
 </html>
+
