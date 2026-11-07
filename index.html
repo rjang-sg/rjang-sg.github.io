@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEA Air Temperature Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f3f2ef;
+    --surface-1: #fcfcfb;
+    --border: #e1dfd9;
+    --grid: #ebe9e4;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7973;
+    --series-1: #2a78d6;
+    --series-1-soft: rgba(42,120,214,0.22);
+    --accent: #2a78d6;
+    --warn-bg: #fff4d6; --warn-text: #6b4a00;
+    --err-bg: #fde4e3;  --err-text: #8a1d1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --border: #2e2e2c;
+      --grid: #272725;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #94938b;
+      --series-1: #3987e5;
+      --series-1-soft: rgba(57,135,229,0.28);
+      --accent: #3987e5;
+      --warn-bg: #3a2f10; --warn-text: #f3d48a;
+      --err-bg: #3b1716;  --err-text: #f4b3b2;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--surface-0); color: var(--text-primary); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+  header h1 { font-size: 20px; margin: 0 0 2px; }
+  header p { margin: 0 0 16px; color: var(--text-secondary); }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--text-secondary); }
+  input, select, button { font: inherit; color: var(--text-primary); background: var(--surface-1);
+         border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+  input[type=number] { width: 110px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
+  details.settings { margin-top: 10px; color: var(--text-secondary); }
+  details.settings summary { cursor: pointer; font-size: 13px; }
+  details.settings .controls { margin-top: 10px; }
+  .status { margin: 12px 0 0; font-size: 13px; color: var(--text-secondary); min-height: 1.2em; }
+  .progress { height: 4px; background: var(--grid); border-radius: 2px; overflow: hidden; margin-top: 8px; display: none; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .banner { padding: 8px 12px; border-radius: 6px; margin-top: 10px; font-size: 13px; display: none; }
+  .banner.warn { background: var(--warn-bg); color: var(--warn-text); }
+  .banner.err { background: var(--err-bg); color: var(--err-text); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }
+  .kpi .label { font-size: 12px; color: var(--text-secondary); }
+  .kpi .value { font-size: 26px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .grid2 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .chart-card h2 { font-size: 15px; margin: 0 0 2px; }
+  .chart-card .note { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; }
+  .chart-box { position: relative; height: 300px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 600; position: sticky; top: 0; background: var(--surface-1); }
+  tr.thin td { color: var(--warn-text); }
+  .table-wrap { max-height: 380px; overflow: auto; }
+  .row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+  .hidden { display: none !important; }
+  footer { margin-top: 18px; font-size: 12px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Air Temperature Dashboard</h1>
+    <p>NEA weather-station readings via data.gov.sg, using the station nearest your site. Uses hourly spot readings to stay within the API rate limit.</p>
+  </header>
+
+  <section class="card">
+    <div class="controls">
+      <div class="field">
+        <label>View</label>
+        <div class="seg" id="modeSeg">
+          <button data-mode="live" aria-pressed="true">Today (live)</button>
+          <button data-mode="day" aria-pressed="false">Single day</button>
+          <button data-mode="month" aria-pressed="false">Month</button>
+        </div>
+      </div>
+      <div class="field hidden" id="dayField">
+        <label for="dayInput">Date</label>
+        <input type="date" id="dayInput">
+      </div>
+      <div class="field hidden" id="monthField">
+        <label for="monthInput">Month</label>
+        <input type="month" id="monthInput">
+      </div>
+      <div class="field hidden" id="stepField">
+        <label for="stepSel">Sampling</label>
+        <select id="stepSel">
+          <option value="1">Every hour (most accurate)</option>
+          <option value="3" selected>Every 3 hours</option>
+          <option value="6">Every 6 hours (fastest)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="stationSel">Station</label>
+        <select id="stationSel"><option value="">Nearest (auto)</option></select>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button class="primary" id="loadBtn">Load data</button>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="csvBtn" disabled>Export CSV</button>
+      </div>
+    </div>
+
+    <details class="settings">
+      <summary>Site and API settings</summary>
+      <div class="controls">
+        <div class="field"><label for="latInput">Site latitude</label><input type="number" step="0.0001" id="latInput"></div>
+        <div class="field"><label for="lonInput">Site longitude</label><input type="number" step="0.0001" id="lonInput"></div>
+        <div class="field"><label for="cddInput">CDD base (°C)</label><input type="number" step="0.1" id="cddInput"></div>
+        <div class="field" style="min-width:260px;flex:1">
+          <label for="keyInput">data.gov.sg API key (optional, raises rate limit; saved in this browser only)</label>
+          <input type="password" id="keyInput" placeholder="leave blank for public access">
+        </div>
+        <div class="field"><label>&nbsp;</label><button id="saveBtn">Save settings</button></div>
+      </div>
+    </details>
+
+    <div class="progress" id="progress"><div></div></div>
+    <p class="status" id="status">Ready.</p>
+    <div class="banner warn" id="warnBanner"></div>
+    <div class="banner err" id="errBanner"></div>
+  </section>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid2">
+    <div class="card chart-card">
+      <h2 id="trendTitle">Temperature trend</h2>
+      <p class="note" id="trendNote"></p>
+      <div class="chart-box"><canvas id="trendChart" aria-label="Temperature trend chart" role="img"></canvas></div>
+    </div>
+    <div class="card chart-card" id="rangeCard">
+      <h2 id="rangeTitle">Daily range</h2>
+      <p class="note" id="rangeNote">Bar spans the lowest to highest sampled reading each day; the dot marks the daily mean of the samples.</p>
+      <div class="chart-box"><canvas id="rangeChart" aria-label="Daily temperature range chart" role="img"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="row-head"><h2 style="font-size:15px;margin:0" id="tableTitle">Table</h2>
+        <span class="note" style="font-size:12px;color:var(--text-muted)" id="tableNote"></span></div>
+      <div class="table-wrap"><table id="dataTable"></table></div>
+    </div>
+  </section>
+
+  <footer>
+    Source: National Environment Agency, via data.gov.sg (Singapore Open Data Licence).
+    Readings are automated and not quality-controlled; for official climate records, contact NEA.
+  </footer>
+</div>
+
+<script>
+(() => {
+  const API = "https://api-open.data.gov.sg/v2/real-time/api/air-temperature";
+  const DEFAULTS = { lat: 1.4243, lon: 103.8381, cdd: 18.3, key: "" };
+  const TZ = "Asia/Singapore";
+  const H = 3600000, D = 24 * H;
+  const $ = id => document.getElementById(id);
+
+  // ---------- storage (best effort) ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  };
+  let settings = { ...DEFAULTS, ...store.get("neaTempSettings", {}) };
+  $("latInput").value = settings.lat; $("lonInput").value = settings.lon;
+  $("cddInput").value = settings.cdd; $("keyInput").value = settings.key;
+  function readSettings() {
+    settings = { lat: +$("latInput").value || DEFAULTS.lat, lon: +$("lonInput").value || DEFAULTS.lon,
+                 cdd: isFinite(parseFloat($("cddInput").value)) ? +$("cddInput").value : DEFAULTS.cdd, key: $("keyInput").value.trim() };
+  }
+  $("saveBtn").onclick = () => { readSettings(); setStatus(store.set("neaTempSettings", settings) ? "Settings saved in this browser." : "Could not save settings in this browser; they apply for this session only."); updateEstimate(); };
+
+  // snapshot cache: { "<ms>": { sid: value } } ; stations: { id: {...} }
+  const snaps = new Map(Object.entries(store.get("neaTempSnaps_v2", {})).map(([k, v]) => [+k, v]));
+  const stationsAll = new Map(Object.entries(store.get("neaTempStations_v2", {})));
+  let saveTimer = null;
+  function persist() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const cutoff = Date.now() - 20 * 60000;  // only cache past readings
+      const obj = {}; snaps.forEach((v, k) => { if (k < cutoff) obj[k] = v; });
+      store.set("neaTempSnaps_v2", obj); store.set("neaTempStations_v2", Object.fromEntries(stationsAll));
+    }, 500);
+  }
+
+  // ---------- dates (SGT) ----------
+  const sgtDate = ms => new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(ms);
+  const sgtMidnight = ds => Date.parse(ds + "T00:00:00+08:00");
+  const sgtParam = ms => new Date(ms + 8 * H).toISOString().slice(0, 19);   // YYYY-MM-DDTHH:MM:SS in SGT
+  const fmtTime = ms => new Intl.DateTimeFormat("en-SG", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(ms);
+  const fmtDT = ms => new Intl.DateTimeFormat("en-SG", { timeZone: TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(ms);
+  const fmtDay = ms => new Intl.DateTimeFormat("en-SG", { timeZone: TZ, day: "2-digit", month: "short" }).format(ms);
+  const today = () => sgtDate(Date.now());
+  $("dayInput").value = today(); $("dayInput").max = today();
+  { const [y, m] = today().split("-").map(Number); $("monthInput").value = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7); $("monthInput").max = today().slice(0, 7); }
+
+  // ---------- state ----------
+  let mode = "live", stepH = 3, abort = false, liveTimer = null, lastExport = null;
+  let current = { times: [], t0: 0, t1: 0 };
+  let latest = null;   // {t, vals}
+
+  document.querySelectorAll("#modeSeg button").forEach(b => b.onclick = () => {
+    mode = b.dataset.mode;
+    document.querySelectorAll("#modeSeg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    $("dayField").classList.toggle("hidden", mode !== "day");
+    $("monthField").classList.toggle("hidden", mode !== "month");
+    $("stepField").classList.toggle("hidden", mode !== "month");
+    stopLive(); updateEstimate();
+  });
+  ["dayInput", "monthInput", "stepSel", "keyInput"].forEach(id => $(id).addEventListener("change", updateEstimate));
+  $("stationSel").onchange = () => { if (current.times.length) render(); };
+  $("stopBtn").onclick = () => { abort = true; };
+  $("loadBtn").onclick = load;
+  $("csvBtn").onclick = exportCsv;
+
+  function setStatus(t) { $("status").textContent = t; }
+  function banner(id, msg) { const el = $(id); el.textContent = msg || ""; el.style.display = msg ? "block" : "none"; }
+  function setProgress(f) { const p = $("progress"); p.style.display = f == null ? "none" : "block"; p.firstElementChild.style.width = ((f || 0) * 100) + "%"; }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
+
+  // ---------- which timestamps to fetch ----------
+  function timesFor() {
+    const now = Date.now();
+    let start, end, step = H;
+    if (mode === "live") { start = sgtMidnight(today()); end = now; }
+    else if (mode === "day") { start = sgtMidnight($("dayInput").value); end = start + D - 1; }
+    else {
+      const [y, m] = $("monthInput").value.split("-").map(Number);
+      start = Date.parse(`${y}-${String(m).padStart(2, "0")}-01T00:00:00+08:00`);
+      const n = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      end = start + n * D - 1; step = (+$("stepSel").value) * H;
+    }
+    const out = [];
+    for (let t = start; t <= end && t <= now - 2 * 60000; t += step) out.push(t);
+    return { times: out, t0: start, t1: end + 1, step };
+  }
+  const gapMs = () => settings.key ? 250 : 12500;   // public limit is roughly 5 calls/minute
+  function updateEstimate() {
+    readSettings();
+    if (!$("loadBtn").disabled) {
+      const { times } = timesFor();
+      const need = times.filter(t => !snaps.has(t)).length + (mode === "live" ? 1 : 0);
+      const secs = need * gapMs() / 1000;
+      setStatus(need ? `Ready. ${need} API call(s) needed, about ${secs < 90 ? Math.ceil(secs) + " s" : Math.ceil(secs / 60) + " min"}${settings.key ? "" : " without an API key"}.` : "Ready. All data for this period is already saved in this browser.");
+    }
+  }
+
+  // ---------- fetching with pacing and retry ----------
+  let lastCall = 0;
+  async function apiGet(params) {
+    const url = API + (params ? "?" + new URLSearchParams(params) : "");
+    const headers = settings.key ? { "x-api-key": settings.key } : {};
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const wait = lastCall + gapMs() - Date.now();
+      if (wait > 0) await sleep(wait);
+      if (abort) throw new Error("Stopped");
+      lastCall = Date.now();
+      let r = null;
+      try { r = await fetch(url, { headers }); } catch (e) { r = null; }   // a 429 shows up here as a network error
+      if (r && r.ok) { const j = await r.json(); return j.data || null; }
+      if (r && r.status === 404) return null;
+      if (r && r.status === 401 || r && r.status === 403) throw new Error("data.gov.sg rejected the API key (HTTP " + r.status + "). Check it, or clear it to use public access.");
+      const pause = 65 * (attempt + 1);
+      for (let s = pause; s > 0; s--) {
+        if (abort) throw new Error("Stopped");
+        setStatus(`data.gov.sg is limiting requests (rate limit). Waiting ${s}s, then continuing… (retry ${attempt + 1} of 4)`);
+        await sleep(1000);
+      }
+    }
+    throw new Error("Could not reach data.gov.sg after several retries. Check your internet connection or add an API key, then try again. Data fetched so far is kept.");
+  }
+  function absorb(d) {
+    (d.stations || []).forEach(s => stationsAll.set(s.id, { id: s.id, name: s.name, lat: s.location?.latitude, lon: s.location?.longitude }));
+  }
+  async function fetchSnapshot(t) {
+    const d = await apiGet({ date: sgtParam(t) });
+    const vals = {};
+    if (d) { absorb(d); const rd = (d.readings || [])[0]; if (rd && Math.abs(Date.parse(rd.timestamp) - t) < 60000) (rd.data || []).forEach(x => vals[x.stationId] = +x.value); }
+    snaps.set(t, vals); persist();
+  }
+  async function fetchLatest() {
+    const d = await apiGet(null);
+    if (!d) return;
+    absorb(d);
+    const rd = (d.readings || [])[0];
+    if (rd) { const vals = {}; (rd.data || []).forEach(x => vals[x.stationId] = +x.value); latest = { t: Date.parse(rd.timestamp), vals }; }
+  }
+
+  async function load() {
+    banner("errBanner"); banner("warnBanner"); readSettings(); stopLive();
+    current = timesFor();
+    if (!current.times.length) { banner("errBanner", "Pick a date or month that is not in the future."); return; }
+    abort = false; $("loadBtn").disabled = true; $("stopBtn").disabled = false;
+    const todo = current.times.filter(t => !snaps.has(t)).sort((a, b) => b - a);  // newest first
+    const total = todo.length + (mode === "live" ? 1 : 0); let done = 0;
+    setProgress(total ? 0 : null);
+    try {
+      if (mode === "live") { setStatus("Fetching latest reading…"); await fetchLatest(); done++; setProgress(done / total); fillStations(); render(); }
+      for (const t of todo) {
+        setStatus(`Fetching ${fmtDT(t)} (${done + 1} of ${total})${settings.key ? "" : " · paced for the public rate limit"}…`);
+        await fetchSnapshot(t); done++; setProgress(done / total);
+        if (done % 4 === 0 || done === total) { fillStations(); render(); }
+      }
+      setStatus(total ? `Loaded. ${done} API call(s) made.` : "Loaded from data saved in this browser.");
+    } catch (e) {
+      if (e.message === "Stopped") setStatus("Stopped. Showing what was fetched so far; press Load data to continue where it stopped.");
+      else banner("errBanner", e.message);
+    } finally {
+      $("loadBtn").disabled = false; $("stopBtn").disabled = true; setProgress(null);
+    }
+    fillStations(); render();
+    if (mode === "live") {
+      liveTimer = setInterval(async () => {
+        if ($("loadBtn").disabled) return;
+        try {
+          await fetchLatest();
+          const t = Math.floor((Date.now() + 8 * H) / H) * H - 8 * H;   // current SGT hour
+          if (!snaps.has(t) && Date.now() - t > 2 * 60000) await fetchSnapshot(t);
+          current = timesFor(); render(); setStatus("Live: refreshed at " + fmtTime(Date.now()) + " SGT. Next refresh in 10 minutes.");
+        } catch (e) { setStatus("Live refresh failed: " + e.message); }
+      }, 10 * 60000);
+    }
+  }
+
+  // ---------- stations ----------
+  const dist = s => (s.lat == null) ? Infinity : Math.hypot(s.lat - settings.lat, (s.lon - settings.lon) * Math.cos(settings.lat * Math.PI / 180)) * 111.2;
+  function fillStations() {
+    const sel = $("stationSel"); const keep = sel.value;
+    const list = [...stationsAll.values()].sort((a, b) => dist(a) - dist(b));
+    sel.innerHTML = '<option value="">Nearest (auto)</option>' + list.map(s => `<option value="${s.id}">${s.name} (${s.id}) · ${isFinite(dist(s)) ? dist(s).toFixed(1) + " km" : "?"}</option>`).join("");
+    if (keep && stationsAll.has(keep)) sel.value = keep;
+  }
+  function chosenStation(present) {
+    const v = $("stationSel").value;
+    if (v && stationsAll.has(v)) return stationsAll.get(v);
+    return [...stationsAll.values()].filter(s => present.has(s.id)).sort((a, b) => dist(a) - dist(b))[0];
+  }
+
+  // ---------- charts ----------
+  let trendChart, rangeChart;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function baseOpts(xFmt, ticks) {
+    return {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "nearest", axis: "x", intersect: false },
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor: css("--surface-1"), titleColor: css("--text-primary"), bodyColor: css("--text-secondary"),
+                   borderColor: css("--border"), borderWidth: 1, padding: 10, displayColors: false } },
+      scales: {
+        x: { type: "linear", grid: { color: css("--grid") }, border: { color: css("--border") },
+             afterBuildTicks: ax => { ax.ticks = ticks.map(v => ({ value: v })); },
+             ticks: { color: css("--text-muted"), maxTicksLimit: 20, callback: v => xFmt(v) } },
+        y: { grid: { color: css("--grid") }, border: { display: false },
+             ticks: { color: css("--text-muted"), callback: v => v + " °C" } }
+      }
+    };
+  }
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+
+  function render() {
+    const times = current.times.filter(t => snaps.has(t));
+    const present = new Set(); times.forEach(t => Object.keys(snaps.get(t)).forEach(id => present.add(id)));
+    if (latest) Object.keys(latest.vals).forEach(id => present.add(id));
+    const st = chosenStation(present);
+    if (!st) return;
+    const pts = times.map(t => ({ t, v: snaps.get(t)[st.id] })).filter(p => p.v != null && isFinite(p.v)).sort((a, b) => a.t - b.t);
+    const lat = latest && latest.vals[st.id] != null ? { t: latest.t, v: latest.vals[st.id] } : null;
+    const all = lat && mode === "live" ? [...pts, lat].sort((a, b) => a.t - b.t) : pts;
+    if (!all.length) { banner("warnBanner", `No readings from ${st.name} yet for this period.`); return; }
+    banner("warnBanner");
+    const multiDay = mode === "month";
+    const stationLabel = `${st.name} (${st.id}), ${dist(st).toFixed(1)} km from site`;
+    const vals = all.map(p => p.v);
+    const minP = all.reduce((a, b) => b.v < a.v ? b : a), maxP = all.reduce((a, b) => b.v > a.v ? b : a);
+    const sampleWord = multiDay ? `${current.step / H}-hourly spot readings` : "hourly spot readings";
+
+    // daily stats
+    const perDay = D / current.step;
+    const byDay = new Map(); pts.forEach(p => { const k = sgtDate(p.t); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(p.v); });
+    const daily = [...byDay.entries()].sort().map(([d, v]) => { const m = mean(v);
+      return { date: d, t: sgtMidnight(d) + D / 2, mean: m, min: Math.min(...v), max: Math.max(...v), n: v.length, cdd: Math.max(0, m - settings.cdd), thin: v.length < 0.8 * perDay }; });
+    const fetchedDays = new Set(current.times.filter(t => snaps.has(t)).map(sgtDate));
+    const thin = multiDay ? daily.filter(d => d.thin && fetchedDays.has(d.date) && current.times.filter(t => sgtDate(t) === d.date).every(t => snaps.has(t))) : [];
+
+    // KPIs
+    const kpi = (label, value, sub) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub || ""}</div></div>`;
+    let html = "";
+    if (mode === "live" && lat) html += kpi("Latest reading", lat.v.toFixed(1) + " °C", "at " + fmtTime(lat.t) + " SGT");
+    html += kpi("Mean", mean(vals).toFixed(1) + " °C", multiDay ? `${daily.length} day(s), from ${sampleWord}` : `from ${all.length} ${sampleWord}`);
+    html += kpi("Lowest reading", minP.v.toFixed(1) + " °C", (multiDay ? fmtDT(minP.t) : fmtTime(minP.t)) + " SGT");
+    html += kpi("Highest reading", maxP.v.toFixed(1) + " °C", (multiDay ? fmtDT(maxP.t) : fmtTime(maxP.t)) + " SGT");
+    if (multiDay) html += kpi("Cooling degree-days", daily.reduce((s, d) => s + d.cdd, 0).toFixed(0), `base ${settings.cdd} °C, from daily means`);
+    $("kpis").innerHTML = html;
+    if (thin.length) banner("warnBanner", `Missing readings on ${thin.map(d => d.date.slice(8)).join(", ")}. Treat those days' figures with caution.`);
+
+    // trend
+    const ticks = []; for (let t = current.t0; t <= current.t1; t += multiDay ? 5 * D : 3 * H) ticks.push(t);
+    const o = baseOpts(multiDay ? fmtDay : fmtTime, ticks);
+    o.scales.x.min = current.t0; o.scales.x.max = current.t1;
+    o.plugins.tooltip.callbacks = { title: it => fmtDT(it[0].parsed.x) + " SGT", label: it => it.parsed.y.toFixed(1) + " °C" };
+    $("trendTitle").textContent = multiDay ? "Temperature over the month" : "Temperature through the day";
+    $("trendNote").textContent = `${stationLabel} · ${sampleWord}` + (mode === "live" && lat ? " plus the latest reading" : "");
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart($("trendChart"), { type: "line",
+      data: { datasets: [{ data: all.map(p => ({ x: p.t, y: p.v })), borderColor: css("--series-1"), borderWidth: 2,
+        pointRadius: multiDay ? 0 : 4, pointBackgroundColor: css("--series-1"), pointBorderColor: css("--surface-1"), pointBorderWidth: 2,
+        pointHoverRadius: 6, tension: 0.25, spanGaps: current.step * 1.5 }] }, options: o });
+
+    // range chart
+    $("rangeCard").classList.toggle("hidden", !multiDay);
+    if (rangeChart) { rangeChart.destroy(); rangeChart = null; }
+    if (multiDay && daily.length) {
+      const rt = daily.filter((d, i) => i % 5 === 0).map(d => d.t);
+      const ro = baseOpts(fmtDay, rt);
+      ro.interaction = { mode: "index", intersect: false };
+      ro.scales.x.min = current.t0; ro.scales.x.max = current.t1;
+      ro.scales.y.beginAtZero = false;
+      ro.scales.y.min = Math.floor(Math.min(...daily.map(d => d.min))) - 1;
+      ro.scales.y.max = Math.ceil(Math.max(...daily.map(d => d.max))) + 1;
+      ro.plugins.tooltip.callbacks = { title: it => fmtDay(daily[it[0].dataIndex].t), label: () => null,
+        afterBody: it => { const d = daily[it[0].dataIndex]; return [`Mean ${d.mean.toFixed(1)} °C`, `Low ${d.min.toFixed(1)} °C`, `High ${d.max.toFixed(1)} °C`, `${d.n} of ${perDay} readings`]; } };
+      rangeChart = new Chart($("rangeChart"), { data: { datasets: [
+        { type: "bar", data: daily.map(d => ({ x: d.t, y: [d.min, d.max] })), backgroundColor: css("--series-1-soft"), borderRadius: 4, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 1 },
+        { type: "line", data: daily.map(d => ({ x: d.t, y: +d.mean.toFixed(2) })), showLine: false, pointRadius: 4, pointHoverRadius: 6,
+          pointBackgroundColor: css("--series-1"), pointBorderColor: css("--surface-1"), pointBorderWidth: 2 } ] }, options: ro });
+    }
+
+    // table + export
+    if (multiDay) {
+      $("tableTitle").textContent = "Daily summary"; $("tableNote").textContent = `${stationLabel} · ${sampleWord}`;
+      $("dataTable").innerHTML = "<thead><tr><th>Date</th><th>Mean °C</th><th>Low °C</th><th>High °C</th><th>CDD</th><th>Readings</th></tr></thead><tbody>" +
+        daily.map(d => `<tr class="${thin.includes(d) ? "thin" : ""}"><td>${d.date}</td><td>${d.mean.toFixed(2)}</td><td>${d.min.toFixed(1)}</td><td>${d.max.toFixed(1)}</td><td>${d.cdd.toFixed(2)}</td><td>${d.n} of ${perDay}${thin.includes(d) ? " ⚠" : ""}</td></tr>`).join("") + "</tbody>";
+      lastExport = { name: `temp_daily_${$("monthInput").value}_${st.id}_${current.step / H}h.csv`,
+        header: `date,station_id,station,mean_c,low_c,high_c,cdd_base_${settings.cdd},n_readings,expected_readings`,
+        lines: daily.map(d => [d.date, st.id, `"${st.name}"`, d.mean.toFixed(2), d.min, d.max, d.cdd.toFixed(2), d.n, perDay].join(",")) };
+    } else {
+      $("tableTitle").textContent = "Hourly readings"; $("tableNote").textContent = stationLabel;
+      $("dataTable").innerHTML = "<thead><tr><th>Time (SGT)</th><th>Temperature °C</th></tr></thead><tbody>" +
+        all.map(p => `<tr><td>${fmtTime(p.t)}</td><td>${p.v.toFixed(1)}</td></tr>`).join("") + "</tbody>";
+      lastExport = { name: `temp_hourly_${sgtDate(current.t0)}_${st.id}.csv`, header: "timestamp_sgt,station_id,station,temp_c",
+        lines: all.map(p => [sgtParam(p.t), st.id, `"${st.name}"`, p.v].join(",")) };
+    }
+    $("csvBtn").disabled = false;
+  }
+
+  function exportCsv() {
+    if (!lastExport) return;
+    const blob = new Blob([lastExport.header + "\n" + lastExport.lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = lastExport.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  if (typeof Chart === "undefined") banner("errBanner", "The chart library did not load. Check your internet connection, or whether your network blocks cdn.jsdelivr.net.");
+  else { fillStations(); load(); }
+})();
+</script>
+</body>
+</html>
